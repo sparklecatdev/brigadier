@@ -19,9 +19,9 @@ try:
 except ImportError:
     certifi = None
 
-VERSION = '0.2.8'
+VERSION = '0.2.9'
 SUCATALOG_URL = 'https://swscan.apple.com/content/catalogs/others/index-11-10.15-10.14-10.13-10.12-10.11-10.10-10.9-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog'
-# 7-Zip MSI (15.14)
+# 7-Zip MSI
 SEVENZIP_URL = 'https://www.7-zip.org/a/7z2201-x64.msi'
 
 def status(msg):
@@ -109,8 +109,45 @@ def downloadFile(url, filename, use_requests=False):
     # with some kind of report/progress output
     urlretrieve(url, filename, reporthook=reporthook)
 
-def sevenzipExtract(arcfile, command='e', out_dir=None):
-    cmd = [os.path.join(os.environ['SYSTEMDRIVE'] + "\\", "Program Files", "7-Zip", "7z.exe")]
+def findSevenZipBinary():
+    candidates = []
+    for envvar in ['ProgramW6432', 'ProgramFiles', 'ProgramFiles(x86)']:
+        base = os.environ.get(envvar)
+        if base:
+            candidates.append(os.path.join(base, '7-Zip', '7z.exe'))
+    candidates.append(shutil.which('7z'))
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def installSevenZip(tempdir):
+    sevenzip_msi_dl_path = os.path.join(tempdir, SEVENZIP_URL.split('/')[-1])
+    sevenzip_log_path = os.path.join(tempdir, '7zip-install.log')
+    downloadFile(SEVENZIP_URL, sevenzip_msi_dl_path, use_requests=True)
+    status("Downloaded 7-Zip to %s." % sevenzip_msi_dl_path)
+    status("Installing 7-Zip...")
+    cmd = ['msiexec', '/qn', '/norestart', '/i', sevenzip_msi_dl_path, '/log', sevenzip_log_path]
+    retcode = subprocess.call(cmd)
+    status("7-Zip install returned exit code %s." % retcode)
+    if retcode not in (0, 3010):
+        sys.exit("7-Zip install failed with exit code %s. See %s for details." %
+                 (retcode, sevenzip_log_path))
+    sevenzip_binary = findSevenZipBinary()
+    if not sevenzip_binary:
+        sys.exit("7-Zip install completed but 7z.exe was not found. See %s for details." %
+                 sevenzip_log_path)
+    return sevenzip_binary, sevenzip_msi_dl_path
+
+
+def uninstallSevenZip(sevenzip_msi_dl_path):
+    status("Cleaning up the 7-Zip install...")
+    subprocess.call(['msiexec', '/qn', '/norestart', '/x', sevenzip_msi_dl_path])
+
+
+def sevenzipExtract(sevenzip_binary, arcfile, command='e', out_dir=None):
+    cmd = [sevenzip_binary]
     cmd.append(command)
     if not out_dir:
         out_dir = os.path.dirname(arcfile)
@@ -330,16 +367,13 @@ when running the installer out of 'system32'." % output_dir)
 
         if platform.system() == 'Windows':
             we_installed_7zip = False
-            sevenzip_binary = os.path.join(os.environ['SYSTEMDRIVE'] + "\\", 'Program Files', '7-Zip', '7z.exe')
+            sevenzip_tempdir = None
+            sevenzip_msi_dl_path = None
+            sevenzip_binary = findSevenZipBinary()
             # fetch and install 7-Zip
-            if not os.path.exists(sevenzip_binary):
-                tempdir = tempfile.mkdtemp()
-                sevenzip_msi_dl_path = os.path.join(tempdir, SEVENZIP_URL.split('/')[-1])
-                downloadFile(SEVENZIP_URL, sevenzip_msi_dl_path, use_requests=True)
-                status("Downloaded 7-zip to %s." % sevenzip_msi_dl_path)
-                status("We need to install 7-Zip..")
-                retcode = subprocess.call(['msiexec', '/qn', '/i', sevenzip_msi_dl_path])
-                status("7-Zip install returned exit code %s." % retcode)
+            if not sevenzip_binary:
+                sevenzip_tempdir = tempfile.mkdtemp(prefix="brigadier-7zip_")
+                sevenzip_binary, sevenzip_msi_dl_path = installSevenZip(sevenzip_tempdir)
                 we_installed_7zip = True
 
             status("Extracting...")
@@ -348,14 +382,14 @@ when running the installer out of 'system32'." % output_dir)
                         os.path.join(arc_workdir, 'Payload'),
                         os.path.join(arc_workdir, 'Payload~')]:
                 if os.path.exists(arc):
-                    sevenzipExtract(arc)
+                    sevenzipExtract(sevenzip_binary, arc)
             # finally, 7-Zip also extracts the tree within the DMG to the output dir
-            sevenzipExtract(os.path.join(arc_workdir, 'WindowsSupport.dmg'),
+            sevenzipExtract(sevenzip_binary, os.path.join(arc_workdir, 'WindowsSupport.dmg'),
                             command='x',
                             out_dir=landing_dir)
             if we_installed_7zip:
-                status("Cleaning up the 7-Zip install...")
-                subprocess.call(['cmd', '/c', 'msiexec', '/qn', '/x', sevenzip_msi_dl_path])
+                uninstallSevenZip(sevenzip_msi_dl_path)
+                shutil.rmtree(sevenzip_tempdir, ignore_errors=True)
             if opts.install:
                 status("Installing Boot Camp...")
                 installBootcamp(findBootcampMSI(landing_dir))

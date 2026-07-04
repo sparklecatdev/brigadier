@@ -1,3 +1,9 @@
+### 0.2.9 (July 3, 2026)
+- fix the Windows 7-Zip install flow to locate `7z.exe` across standard install
+  paths and on `PATH`
+- verify the MSI install succeeded before extraction begins and surface the MSI
+  log path when it fails
+
 ### 0.2.8 (July 3, 2026)
 - fix Windows model detection when `wmic` is unavailable by falling back to
   PowerShell CIM queries
