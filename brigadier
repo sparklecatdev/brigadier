@@ -13,14 +13,13 @@ import datetime
 import platform
 
 from urllib.request import urlopen, urlretrieve
-from xml.dom import minidom
 
 try:
     import certifi
 except ImportError:
     certifi = None
 
-VERSION = '0.2.7'
+VERSION = '0.2.8'
 SUCATALOG_URL = 'https://swscan.apple.com/content/catalogs/others/index-11-10.15-10.14-10.13-10.12-10.11-10.10-10.9-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog'
 # 7-Zip MSI (15.14)
 SEVENZIP_URL = 'https://www.7-zip.org/a/7z2201-x64.msi'
@@ -43,27 +42,48 @@ def getCommandOutput(cmd):
     return out
 
 
+def getCommandOutputText(cmd):
+    return getCommandOutput(cmd).decode('utf-8', errors='ignore').strip()
+
+
 def open_url(url):
     if certifi:
         context = ssl.create_default_context(cafile=certifi.where())
         return urlopen(url, context=context)
     return urlopen(url)
 
-# Returns this machine's model identifier, using wmic on Windows,
-# system_profiler on OS X
+# Returns this machine's model identifier, using PowerShell or WMIC
+# on Windows, and system_profiler on macOS.
 def getMachineModel():
+    model_pattern = re.compile(r'([A-Za-z]{4,12}[0-9]{1,2},[0-9]{1,2})')
+
     if platform.system() == 'Windows':
-        rawxml = getCommandOutput(['wmic', 'computersystem', 'get', 'model', '/format:RAWXML'])
-        dom = minidom.parseString(rawxml)
-        results = dom.getElementsByTagName("RESULTS")
-        nodes = results[0].getElementsByTagName("CIM")[0].getElementsByTagName("INSTANCE")[0]\
-        .getElementsByTagName("PROPERTY")[0].getElementsByTagName("VALUE")[0].childNodes
-        model = nodes[0].data
+        commands = [
+            ['powershell', '-NoProfile', '-Command',
+             '(Get-CimInstance -ClassName Win32_ComputerSystemProduct).Name'],
+            ['powershell', '-NoProfile', '-Command',
+             '(Get-CimInstance -ClassName Win32_ComputerSystemProduct).Version'],
+            ['powershell', '-NoProfile', '-Command',
+             '(Get-CimInstance -ClassName Win32_ComputerSystem).Model'],
+            ['wmic', 'csproduct', 'get', 'name', '/value'],
+            ['wmic', 'csproduct', 'get', 'version', '/value'],
+            ['wmic', 'computersystem', 'get', 'model', '/value'],
+        ]
+        for cmd in commands:
+            try:
+                output = getCommandOutputText(cmd)
+            except OSError:
+                continue
+            match = model_pattern.search(output)
+            if match:
+                return match.group(1)
+        sys.exit("Couldn't determine this Mac's model identifier automatically on Windows. "
+                 "Use --model with a value like MacBookPro16,1.")
     elif platform.system() == 'Darwin':
         plistxml = getCommandOutput(['system_profiler', 'SPHardwareDataType', '-xml'])
         plist = read_plist_from_bytes(plistxml)
-        model = plist[0]['_items'][0]['machine_model']
-    return model
+        return plist[0]['_items'][0]['machine_model']
+    sys.exit("Automatic model detection is only supported on Windows and macOS. Use --model instead.")
 
 def downloadFile(url, filename, use_requests=False):
     # http://stackoverflow.com/questions/13881092/

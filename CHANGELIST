@@ -1,3 +1,8 @@
+### 0.2.8 (July 3, 2026)
+- fix Windows model detection when `wmic` is unavailable by falling back to
+  PowerShell CIM queries
+- fail with a clear `--model` hint when Windows cannot identify an Apple model
+
 ### 0.2.7 (July 3, 2026)
 - port the main script to Python 3
 - remove the runtime dependency on requests while still using certifi when
