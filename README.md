@@ -72,11 +72,11 @@ By default, when `--install` is used, it will clean up its extracted files after
 
 ## Running/building from source on Windows
 
-If you'd rather run it as a standard Python script, you'll need [Python for Windows](http://www.python.org/download/releases) (this was tested with the latest 2.7 release) in order to execute the script.
+If you'd rather run it as a standard Python script, you'll need Python 3.
 
-If you'd rather build it yourself, you can use the included build script. It requires [Python](http://www.python.org/download/releases) and the matching version of [pywin32](http://sourceforge.net/projects/pywin32/files). It handles downloading PyInstaller for you. Simply run it with no arguments, and it will build a zip file in the current working directory:
+If you'd rather build it yourself, install the dependencies from `ci/windows/requirements.txt` and run:
 
-`c:\python27\python build_windows_exe.py`
+`py -3 build_windows_exe.py`
 
 ## Unpack details on Windows
 

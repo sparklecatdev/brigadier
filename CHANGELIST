@@ -1,3 +1,9 @@
+### 0.2.7 (July 3, 2026)
+- port the main script to Python 3
+- remove the runtime dependency on requests while still using certifi when
+  available for TLS certificate validation
+- update the Windows CI/build path to use Python 3 and a current PyInstaller
+
 ### 0.2.6 (November 9, 2022)
 - use certifi package to provide a certificates bundle, fixing issues
   with accessing 7-zip website (LetsEncrypt) from old Windows versions
